@@ -38,6 +38,7 @@ export const DeviceMode = {
  * @param {string} data.status - Audit status ('success', 'failed', or 'timeout')
  * @param {string} [data.error] - Error message if status is not 'success'
  * @param {number} [data.retryAttempt=0] - Retry attempt number (0 or 1)
+ * @param {Object} [data.categories] - Category scores for full WCV support (feature 002)
  * @returns {Object} - Validated audit object
  */
 export function createAudit(data) {
@@ -51,7 +52,9 @@ export function createAudit(data) {
     auditDuration: data.auditDuration,
     status: data.status,
     error: data.error || null,
-    retryAttempt: data.retryAttempt || 0
+    retryAttempt: data.retryAttempt || 0,
+    // Extended metrics for full WCV support (feature 002)
+    categories: data.categories
   };
 
   // Validate the audit
@@ -140,6 +143,13 @@ export function validateAudit(audit) {
   if (audit.status !== AuditStatus.SUCCESS && !audit.error) {
     throw new Error('error is required when status is not success');
   }
+
+  // Validate optional categories field (feature 002)
+  if (audit.categories !== undefined && audit.categories !== null) {
+    if (typeof audit.categories !== 'object' || Array.isArray(audit.categories)) {
+      throw new Error('categories must be an object');
+    }
+  }
 }
 
 /**
@@ -209,7 +219,9 @@ export function auditToJSON(audit) {
       auditDuration: audit.auditDuration,
       status: audit.status,
       ...(audit.error && { error: audit.error }),
-      retryAttempt: audit.retryAttempt
+      retryAttempt: audit.retryAttempt,
+      // Extended metrics for full WCV support (feature 002)
+      ...(audit.categories && { categories: audit.categories })
     }
   };
 }

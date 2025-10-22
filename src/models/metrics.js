@@ -65,6 +65,10 @@ function calculateScore(value, threshold) {
  * @param {number} data.ttfb - Time to First Byte (milliseconds)
  * @param {number} data.tbt - Total Blocking Time (milliseconds)
  * @param {number} data.performanceScore - Overall Lighthouse performance score (0-100)
+ * @param {number} [data.accessibilityScore] - Accessibility score (0-100)
+ * @param {number} [data.seoScore] - SEO score (0-100)
+ * @param {number} [data.bestPracticesScore] - Best practices score (0-100)
+ * @param {Object} [data.categoryDetails] - Detailed findings by category
  * @returns {Object} - Metrics object with calculated scores
  */
 export function createMetrics(data) {
@@ -79,7 +83,12 @@ export function createMetrics(data) {
     ttfb: data.ttfb,
     ttfbScore: calculateScore(data.ttfb, Thresholds.TTFB),
     tbt: data.tbt,
-    performanceScore: data.performanceScore
+    performanceScore: data.performanceScore,
+    // Extended metrics for full WCV support (feature 002)
+    accessibilityScore: data.accessibilityScore,
+    seoScore: data.seoScore,
+    bestPracticesScore: data.bestPracticesScore,
+    categoryDetails: data.categoryDetails
   };
 
   // Validate the metrics
@@ -113,6 +122,19 @@ export function validateMetrics(metrics) {
     throw new Error('performanceScore must be between 0 and 100');
   }
 
+  // Validate extended category scores (optional fields for feature 002)
+  const categoryScoreFields = ['accessibilityScore', 'seoScore', 'bestPracticesScore'];
+  for (const field of categoryScoreFields) {
+    if (metrics[field] !== undefined && metrics[field] !== null) {
+      if (typeof metrics[field] !== 'number') {
+        throw new Error(`${field} must be a number`);
+      }
+      if (metrics[field] < 0 || metrics[field] > 100) {
+        throw new Error(`${field} must be between 0 and 100`);
+      }
+    }
+  }
+
   // Validate score labels
   const scoreFields = ['lcpScore', 'inpScore', 'clsScore', 'ttfbScore'];
   const validScores = Object.values(ScoreLabel);
@@ -122,6 +144,214 @@ export function validateMetrics(metrics) {
       throw new Error(`${field} must be one of: ${validScores.join(', ')}`);
     }
   }
+}
+
+/**
+ * Extracts category score from Lighthouse Result (LHR) categories object
+ *
+ * @param {Object} lhr - Lighthouse Result object
+ * @param {string} categoryName - Category name ('accessibility', 'seo', 'best-practices')
+ * @returns {number|undefined} - Category score (0-100) or undefined if not available
+ */
+export function extractCategoryScore(lhr, categoryName) {
+  // Lighthouse stores category scores as 0-1, convert to 0-100
+  const categoryScore = lhr.categories?.[categoryName]?.score;
+
+  if (categoryScore === null || categoryScore === undefined) {
+    return undefined;
+  }
+
+  return Math.round(categoryScore * 100);
+}
+
+/**
+ * Gets audit references for a specific category from LHR
+ *
+ * @param {Object} lhr - Lighthouse Result object
+ * @param {string} categoryName - Category name ('accessibility', 'seo', 'best-practices')
+ * @returns {Array} - Array of audit reference objects with id and weight
+ */
+export function getCategoryAuditRefs(lhr, categoryName) {
+  const category = lhr.categories?.[categoryName];
+
+  if (!category || !category.auditRefs) {
+    return [];
+  }
+
+  // Return audit refs (array of {id, weight, group} objects)
+  return category.auditRefs;
+}
+
+/**
+ * Validates a category details object
+ *
+ * @param {Object} categoryDetails - Category details object to validate
+ * @param {string} categoryDetails.categoryName - Category name
+ * @param {number} categoryDetails.score - Category score (0-100)
+ * @param {Array} categoryDetails.audits - Array of audit objects
+ * @throws {Error} - If validation fails
+ */
+export function validateCategoryDetails(categoryDetails) {
+  if (!categoryDetails) {
+    throw new Error('categoryDetails is required');
+  }
+
+  if (typeof categoryDetails !== 'object' || Array.isArray(categoryDetails)) {
+    throw new Error('categoryDetails must be an object');
+  }
+
+  // Validate categoryName
+  const validCategories = ['accessibility', 'seo', 'best-practices', 'performance'];
+  if (!categoryDetails.categoryName || !validCategories.includes(categoryDetails.categoryName)) {
+    throw new Error(`categoryName must be one of: ${validCategories.join(', ')}`);
+  }
+
+  // Validate score
+  if (typeof categoryDetails.score !== 'number') {
+    throw new Error('category score must be a number');
+  }
+
+  if (categoryDetails.score < 0 || categoryDetails.score > 100) {
+    throw new Error('category score must be between 0 and 100');
+  }
+
+  // Validate audits array
+  if (!Array.isArray(categoryDetails.audits)) {
+    throw new Error('audits must be an array');
+  }
+
+  // Validate each audit object
+  for (const audit of categoryDetails.audits) {
+    if (!audit.id || typeof audit.id !== 'string') {
+      throw new Error('audit.id is required and must be a string');
+    }
+
+    if (!audit.title || typeof audit.title !== 'string') {
+      throw new Error('audit.title is required and must be a string');
+    }
+
+    if (audit.score !== null && audit.score !== undefined) {
+      if (typeof audit.score !== 'number' || audit.score < 0 || audit.score > 1) {
+        throw new Error('audit.score must be a number between 0 and 1');
+      }
+    }
+  }
+}
+
+/**
+ * Simplifies an audit object by extracting essential fields
+ *
+ * @param {Object} audit - Full Lighthouse audit object
+ * @param {string} auditId - Audit identifier
+ * @returns {Object} - Simplified audit object with essential fields
+ */
+export function simplifyAuditDetails(audit, auditId) {
+  return {
+    id: auditId,
+    title: audit.title || '',
+    description: audit.description || '',
+    score: audit.score, // 0-1 scale (null for informational audits)
+    scoreDisplayMode: audit.scoreDisplayMode || 'binary', // binary, numeric, informational, etc.
+    displayValue: audit.displayValue || null,
+    details: audit.details || null // Structured data (tables, lists, etc.)
+  };
+}
+
+/**
+ * Selects ALL audits for a category from LHR (no cap)
+ * Per clarifications: extract ALL audits for comprehensive reporting (200+ audits total)
+ *
+ * @param {Object} lhr - Lighthouse Result object
+ * @param {Array} auditRefs - Array of audit reference objects from category
+ * @returns {Array} - Array of simplified audit objects
+ */
+export function selectAllAudits(lhr, auditRefs) {
+  const audits = [];
+
+  // Iterate through ALL audit refs (no 20-audit cap per clarifications)
+  for (const ref of auditRefs) {
+    const auditId = ref.id;
+    const audit = lhr.audits?.[auditId];
+
+    if (!audit) {
+      continue;
+    }
+
+    // Simplify audit details for storage and display
+    const simplifiedAudit = simplifyAuditDetails(audit, auditId);
+    audits.push(simplifiedAudit);
+  }
+
+  return audits;
+}
+
+/**
+ * Extracts category details (score + ALL audits) from LHR for a specific category
+ * Per clarifications: extract ALL audits for comprehensive reporting (200+ audits total)
+ *
+ * @param {Object} lhr - Lighthouse Result object
+ * @param {string} categoryName - Category name ('accessibility', 'seo', 'best-practices', 'performance')
+ * @returns {Object|null} - Category details object or null if category not found
+ */
+export function extractCategoryDetailsFromLHR(lhr, categoryName) {
+  const category = lhr.categories?.[categoryName];
+
+  if (!category) {
+    return null;
+  }
+
+  // Get category score (0-1 in LHR, convert to 0-100)
+  const score = category.score !== null && category.score !== undefined
+    ? Math.round(category.score * 100)
+    : 0;
+
+  // Get audit refs for this category
+  const auditRefs = category.auditRefs || [];
+
+  // Extract ALL audits (no cap, comprehensive reporting per clarifications)
+  const audits = selectAllAudits(lhr, auditRefs);
+
+  return {
+    categoryName,
+    score,
+    audits
+  };
+}
+
+/**
+ * Extracts extended metrics (all four categories with ALL audit details) from LHR
+ * Per clarifications: comprehensive reporting with ALL audits (200+ total)
+ *
+ * @param {Object} lhr - Lighthouse Result object
+ * @returns {Object} - Extended metrics object with all category scores and details
+ */
+export function extractExtendedMetricsFromLHR(lhr) {
+  // Extract category scores
+  const accessibilityScore = extractCategoryScore(lhr, 'accessibility');
+  const seoScore = extractCategoryScore(lhr, 'seo');
+  const bestPracticesScore = extractCategoryScore(lhr, 'best-practices');
+
+  // Extract category details (score + ALL audits)
+  const categoryDetails = {
+    accessibility: extractCategoryDetailsFromLHR(lhr, 'accessibility'),
+    seo: extractCategoryDetailsFromLHR(lhr, 'seo'),
+    'best-practices': extractCategoryDetailsFromLHR(lhr, 'best-practices')
+  };
+
+  // Remove null categories (in case some are missing)
+  const filteredCategoryDetails = {};
+  for (const [key, value] of Object.entries(categoryDetails)) {
+    if (value !== null) {
+      filteredCategoryDetails[key] = value;
+    }
+  }
+
+  return {
+    accessibilityScore,
+    seoScore,
+    bestPracticesScore,
+    categoryDetails: filteredCategoryDetails
+  };
 }
 
 /**
@@ -164,7 +394,7 @@ export function extractMetricsFromLHR(lhr) {
  * @returns {Object} - Human-readable metrics
  */
 export function metricsToHumanReadable(metrics) {
-  return {
+  const readable = {
     'Largest Contentful Paint (LCP)': `${(metrics.lcp / 1000).toFixed(2)}s (${metrics.lcpScore})`,
     'Interaction to Next Paint (INP)': `${metrics.inp}ms (${metrics.inpScore})`,
     'Cumulative Layout Shift (CLS)': `${metrics.cls.toFixed(3)} (${metrics.clsScore})`,
@@ -172,6 +402,19 @@ export function metricsToHumanReadable(metrics) {
     'Total Blocking Time (TBT)': `${metrics.tbt}ms`,
     'Performance Score': `${metrics.performanceScore}/100`
   };
+
+  // Add extended category scores if present (feature 002)
+  if (metrics.accessibilityScore !== undefined) {
+    readable['Accessibility Score'] = `${metrics.accessibilityScore}/100`;
+  }
+  if (metrics.seoScore !== undefined) {
+    readable['SEO Score'] = `${metrics.seoScore}/100`;
+  }
+  if (metrics.bestPracticesScore !== undefined) {
+    readable['Best Practices Score'] = `${metrics.bestPracticesScore}/100`;
+  }
+
+  return readable;
 }
 
 /**
@@ -228,7 +471,12 @@ export function metricsToJSON(metrics) {
       ttfb: metrics.ttfb,
       ttfbScore: metrics.ttfbScore,
       tbt: metrics.tbt,
-      performanceScore: metrics.performanceScore
+      performanceScore: metrics.performanceScore,
+      // Extended metrics for full WCV support (feature 002)
+      ...(metrics.accessibilityScore !== undefined && { accessibilityScore: metrics.accessibilityScore }),
+      ...(metrics.seoScore !== undefined && { seoScore: metrics.seoScore }),
+      ...(metrics.bestPracticesScore !== undefined && { bestPracticesScore: metrics.bestPracticesScore }),
+      ...(metrics.categoryDetails !== undefined && { categoryDetails: metrics.categoryDetails })
     }
   };
 }

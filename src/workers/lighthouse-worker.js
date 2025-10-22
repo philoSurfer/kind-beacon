@@ -11,7 +11,7 @@
 import { parentPort, workerData } from 'worker_threads';
 import lighthouse from 'lighthouse';
 import * as chromeLauncher from 'chrome-launcher';
-import { extractMetricsFromLHR } from '../models/metrics.js';
+import { extractMetricsFromLHR, extractExtendedMetricsFromLHR } from '../models/metrics.js';
 
 /**
  * Executes a Lighthouse audit in a worker thread
@@ -31,7 +31,8 @@ async function runAuditInWorker() {
     // Configure Lighthouse options
     const lighthouseOptions = {
       port: chrome.port,
-      onlyCategories: ['performance'],
+      // Feature 002: Extract all four categories for full WCV support
+      onlyCategories: ['performance', 'accessibility', 'seo', 'best-practices'],
       formFactor: options.device || 'mobile',
       screenEmulation: {
         mobile: options.device !== 'desktop',
@@ -60,8 +61,17 @@ async function runAuditInWorker() {
     const endTime = Date.now();
     const auditDuration = endTime - startTime;
 
-    // Extract metrics from LHR (T022)
-    const metrics = extractMetricsFromLHR(result.lhr);
+    // Extract core metrics from LHR
+    const coreMetrics = extractMetricsFromLHR(result.lhr);
+
+    // Extract extended metrics (all four categories) from LHR (Feature 002)
+    const extendedMetrics = extractExtendedMetricsFromLHR(result.lhr);
+
+    // Merge core and extended metrics
+    const metrics = {
+      ...coreMetrics,
+      ...extendedMetrics
+    };
 
     // Post successful result back to parent
     parentPort.postMessage({

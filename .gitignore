@@ -90,6 +90,6 @@ IMPLEMENTATION_*.md
 PHASE_*.md
 
 # local development artifacts
-CLAUDE.md
+# CLAUDE.md - removed from ignore, should be tracked for project guidelines
 .claude/
-.specify/
+# .specify/ - removed from ignore, contains project constitution and templates
