@@ -1,0 +1,95 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Output directories (project-specific)
+data/
+reports/
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Runtime data
+lib-cov
+.grunt
+.lock-wscript
+.node_repl_history
+*.tgz
+
+# Testing
+coverage/
+.nyc_output/
+*.lcov
+.vscode-test
+
+# Build output
+dist/
+build/
+out/
+
+# Cache files
+.npm
+.eslintcache
+.node_repl_history
+.yarn-integrity
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+
+# IDE / Editor directories and files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.sublime-project
+*.sublime-workspace
+*.iml
+
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# Optional REPL history
+.node_repl_history
+
+# Temporary files
+*.tmp
+.cache/
+tmp/
+
+# Debug logs
+debug.log
+
+# Documentation build (if applicable)
+docs/_build/
+
+# Implementation notes and phase reports (optional - uncomment if you want to commit these)
+IMPLEMENTATION_*.md
+PHASE_*.md
+
+# local development artifacts
+CLAUDE.md
+.claude/
+.specify/
