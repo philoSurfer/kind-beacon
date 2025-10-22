@@ -1,0 +1,7 @@
+{
+  "concurrency": 5,
+  "timeout": 90,
+  "device": "desktop",
+  "dataDir": "./data",
+  "reportsDir": "./reports"
+}

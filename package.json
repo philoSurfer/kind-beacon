@@ -1,0 +1,57 @@
+{
+  "name": "kind-beacon",
+  "version": "1.0.0",
+  "description": "Core Web Vitals auditing tool using Google Lighthouse. Batch process URLs from CSV files with concurrent auditing, device emulation, and beautiful HTML reports.",
+  "type": "module",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "lighthouse",
+    "core-web-vitals",
+    "performance",
+    "audit",
+    "cli",
+    "web-performance",
+    "lcp",
+    "inp",
+    "cls",
+    "ttfb",
+    "batch-processing",
+    "html-reports",
+    "macos"
+  ],
+  "author": "Kind Lab",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kind-beacon/kind-beacon.git"
+  },
+  "homepage": "https://github.com/kind-beacon/kind-beacon#readme",
+  "bugs": {
+    "url": "https://github.com/kind-beacon/kind-beacon/issues"
+  },
+  "bin": {
+    "kind-beacon": "./src/cli/index.js"
+  },
+  "files": [
+    "src/",
+    "examples/",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "node --test"
+  },
+  "dependencies": {
+    "chrome-launcher": "^1.2.1",
+    "cli-progress": "^3.12.0",
+    "commander": "^14.0.1",
+    "cosmiconfig": "^9.0.0",
+    "lighthouse": "^13.0.0",
+    "p-limit": "^7.2.0",
+    "p-retry": "^7.1.0",
+    "papaparse": "^5.5.3"
+  }
+}

@@ -1,0 +1,9 @@
+url,description
+https://example.com,Valid URL
+not-a-url,Invalid - no protocol
+https://example.org,Valid URL
+ftp://example.com,Invalid - FTP protocol
+https://example.net,Valid URL
+,Empty URL
+https://example.edu,Valid URL
+invalid-url,Invalid - malformed
