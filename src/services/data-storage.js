@@ -13,6 +13,36 @@ import { auditToJSON } from '../models/audit.js';
 import { metricsToJSON } from '../models/metrics.js';
 
 /**
+ * CRITICAL FIX #3: Validates output path to prevent path traversal attacks
+ * Ensures the resolved path is within the current working directory
+ *
+ * @param {string} outputPath - Path to validate
+ * @returns {string} - Validated absolute path
+ * @throws {Error} - If path is outside current directory
+ */
+function validateOutputPath(outputPath) {
+  const resolved = path.resolve(outputPath);
+  const cwd = process.cwd();
+
+  // Normalize paths for comparison (handles trailing slashes, etc.)
+  const normalizedResolved = path.normalize(resolved);
+  const normalizedCwd = path.normalize(cwd);
+
+  // Check if resolved path starts with current directory
+  if (!normalizedResolved.startsWith(normalizedCwd + path.sep) &&
+      normalizedResolved !== normalizedCwd) {
+    throw new Error(
+      `Security error: Output path must be within current directory.\n` +
+      `Attempted path: ${outputPath}\n` +
+      `Resolved to: ${resolved}\n` +
+      `Current directory: ${cwd}`
+    );
+  }
+
+  return resolved;
+}
+
+/**
  * T028: Saves audit data to a JSON file with timestamped filename (Feature 002)
  *
  * @param {Object} audit - Audit object from audit model
@@ -27,8 +57,11 @@ import { metricsToJSON } from '../models/metrics.js';
  * // returns: '/absolute/path/to/data/example-com_2025-10-22-143052_mobile.json'
  */
 export async function saveAuditData(audit, metrics, outputDir, device = 'mobile', date = new Date()) {
+  // CRITICAL FIX #3: Validate output path to prevent path traversal
+  const validatedDir = validateOutputPath(outputDir);
+
   // Ensure output directory exists
-  await fs.mkdir(outputDir, { recursive: true });
+  await fs.mkdir(validatedDir, { recursive: true });
 
   // Build JSON structure per data-model.md
   const auditJson = auditToJSON(audit);
@@ -39,7 +72,7 @@ export async function saveAuditData(audit, metrics, outputDir, device = 'mobile'
 
   // T028: Generate filename with timestamp and device
   const filename = generateDataFilename(audit.requestedUrl, device, date);
-  const filePath = path.join(outputDir, filename);
+  const filePath = path.join(validatedDir, filename);
 
   // Write JSON to file with pretty formatting
   await fs.writeFile(filePath, JSON.stringify(data, null, 2), 'utf-8');
@@ -62,7 +95,8 @@ export async function loadAuditData(filePath) {
     const content = await fs.readFile(filePath, 'utf-8');
     return JSON.parse(content);
   } catch (error) {
-    if (error.code === 'ENOENT') {
+    // HIGH FIX #12: Use optional chaining for error code check
+    if (error?.code === 'ENOENT') {
       // File doesn't exist
       return null;
     }
@@ -83,10 +117,16 @@ export async function loadAuditData(filePath) {
 export async function listAuditDataFiles(dataDir) {
   try {
     const files = await fs.readdir(dataDir);
-    // Filter for JSON files matching the naming pattern
-    return files.filter(file => file.endsWith('-report.json'));
+    // HIGH FIX #28: Update filter to match both old and new naming patterns
+    // Old: example.com-2025-10-22-report.json
+    // New: example-com_2025-10-22-143052_mobile.json
+    return files.filter(file =>
+      file.endsWith('-report.json') || // Old format
+      file.match(/_\d{4}-\d{2}-\d{2}-\d{6}_(mobile|desktop)\.json$/) // New format
+    );
   } catch (error) {
-    if (error.code === 'ENOENT') {
+    // HIGH FIX #12: Use optional chaining for error code check
+    if (error?.code === 'ENOENT') {
       // Directory doesn't exist
       return [];
     }

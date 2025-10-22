@@ -37,19 +37,19 @@ import { logProgress, logSuccess, logError, logInfo, createProgressBar } from '.
  * // => { successful: [...], failed: [...], summary: { ... } }
  */
 export async function orchestrateAudits(urls, auditFunction, options = {}) {
+  // HIGH FIX #15: Validate options at the very start before any other operations
+  const concurrency = options.concurrency || 3;
+  if (concurrency < 1 || concurrency > 10) {
+    throw new Error(`Concurrency must be between 1 and 10 (got: ${concurrency})`);
+  }
+
   const {
-    concurrency = 3,
     timeout = 60,
     device = 'mobile',
     dataDir = './data',
     reportsDir = './reports',
     json = false  // T033: Support --json flag in batch mode
   } = options;
-
-  // Validate concurrency
-  if (concurrency < 1 || concurrency > 10) {
-    throw new Error(`Concurrency must be between 1 and 10 (got: ${concurrency})`);
-  }
 
   const startTime = Date.now();
   const total = urls.length;
@@ -76,12 +76,14 @@ export async function orchestrateAudits(urls, auditFunction, options = {}) {
   const progressBar = createProgressBar(total);
   progressBar.start();
 
-  // Create concurrency limiter using p-limit
-  const limit = pLimit(concurrency);
-  let completed = 0;
+  // CRITICAL FIX #5: Use try-finally to ensure progress bar is always stopped
+  try {
+    // Create concurrency limiter using p-limit
+    const limit = pLimit(concurrency);
+    let completed = 0;
 
-  // Create audit tasks with progress tracking
-  const auditTasks = urls.map((url, index) => {
+    // Create audit tasks with progress tracking
+    const auditTasks = urls.map((url, index) => {
     return limit(async () => {
       const auditStartTime = Date.now();
 
@@ -89,14 +91,16 @@ export async function orchestrateAudits(urls, auditFunction, options = {}) {
         // Update progress bar with current URL
         progressBar.update(completed, { url });
 
-        // T033: Run the audit with all options including --json flag
-        const result = await auditFunction(url, {
-          timeout,
-          device,
-          dataDir,
-          reportsDir,
-          json  // Pass through json flag
-        });
+        // CRITICAL FIX #4: Wrap audit function in Promise.resolve to catch synchronous throws
+        const result = await Promise.resolve(
+          auditFunction(url, {
+            timeout,
+            device,
+            dataDir,
+            reportsDir,
+            json  // Pass through json flag
+          })
+        );
 
         const duration = Date.now() - auditStartTime;
         completed++;
@@ -127,16 +131,17 @@ export async function orchestrateAudits(urls, auditFunction, options = {}) {
     });
   });
 
-  // Execute all audits with concurrency limit
-  await Promise.all(auditTasks);
+    // Execute all audits with concurrency limit
+    await Promise.all(auditTasks);
 
-  // Stop the progress bar
-  progressBar.stop();
+    // Calculate total duration
+    results.summary.duration = Date.now() - startTime;
 
-  // Calculate total duration
-  results.summary.duration = Date.now() - startTime;
-
-  return results;
+    return results;
+  } finally {
+    // CRITICAL FIX #5: Always stop progress bar to prevent memory leaks
+    progressBar.stop();
+  }
 }
 
 /**
@@ -197,12 +202,16 @@ export function validateUrls(urls) {
 export function createSummary(results) {
   const { successful, failed, summary } = results;
 
+  // HIGH FIX #7: Prevent division by zero
+  const total = successful.length + failed.length;
+  const successRate = total > 0 ? (successful.length / total * 100) : 0;
+
   return {
-    totalAudits: successful.length + failed.length,
+    totalAudits: total,
     successful: successful.length,
     failed: failed.length,
     duration: summary.duration,
-    successRate: successful.length / (successful.length + failed.length) * 100,
+    successRate,
     reportsDir: summary.reportsDir,
     dataDir: summary.dataDir
   };

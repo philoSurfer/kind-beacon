@@ -154,6 +154,14 @@ export function validateMetrics(metrics) {
  * @returns {number|undefined} - Category score (0-100) or undefined if not available
  */
 export function extractCategoryScore(lhr, categoryName) {
+  // HIGH FIX #6: Validate inputs
+  if (!lhr || typeof lhr !== 'object') {
+    throw new Error('extractCategoryScore: lhr must be a valid object');
+  }
+  if (!categoryName || typeof categoryName !== 'string') {
+    throw new Error('extractCategoryScore: categoryName must be a non-empty string');
+  }
+
   // Lighthouse stores category scores as 0-1, convert to 0-100
   const categoryScore = lhr.categories?.[categoryName]?.score;
 
@@ -294,6 +302,14 @@ export function selectAllAudits(lhr, auditRefs) {
  * @returns {Object|null} - Category details object or null if category not found
  */
 export function extractCategoryDetailsFromLHR(lhr, categoryName) {
+  // HIGH FIX #13: Validate inputs
+  if (!lhr || typeof lhr !== 'object') {
+    throw new Error('extractCategoryDetailsFromLHR: lhr must be a valid object');
+  }
+  if (!categoryName || typeof categoryName !== 'string') {
+    throw new Error('extractCategoryDetailsFromLHR: categoryName must be a non-empty string');
+  }
+
   const category = lhr.categories?.[categoryName];
 
   if (!category) {
@@ -361,6 +377,14 @@ export function extractExtendedMetricsFromLHR(lhr) {
  * @returns {Object} - Metrics object
  */
 export function extractMetricsFromLHR(lhr) {
+  // HIGH FIX #29: Validate that LHR has required structure
+  if (!lhr || typeof lhr !== 'object') {
+    throw new Error('extractMetricsFromLHR: lhr must be a valid object');
+  }
+  if (!lhr.audits || typeof lhr.audits !== 'object') {
+    throw new Error('extractMetricsFromLHR: lhr.audits is missing or invalid');
+  }
+
   const audits = lhr.audits;
 
   // Extract metric values from Lighthouse audits

@@ -30,6 +30,16 @@ const __dirname = dirname(__filename);
  * @param {number} [options.timeout=60] - Timeout in seconds
  * @returns {Promise<Object>} - Audit result with metrics and LHR
  */
+// Network error codes that should trigger retry
+const NETWORK_ERROR_CODES = [
+  'ECONNREFUSED',
+  'ENOTFOUND',
+  'ETIMEDOUT',
+  'ECONNRESET',
+  'ENETUNREACH',
+  'PROTOCOL_TIMEOUT'
+];
+
 function runLighthouseInWorker(url, options = {}) {
   return new Promise((resolve, reject) => {
     const workerPath = join(__dirname, '../workers/lighthouse-worker.js');
@@ -38,15 +48,23 @@ function runLighthouseInWorker(url, options = {}) {
       workerData: { url, options }
     });
 
-    // Set a timeout slightly longer than Lighthouse's internal timeout
-    // to allow Lighthouse to timeout gracefully first
-    const workerTimeout = ((options.timeout || 60) + 10) * 1000;
+    // CRITICAL FIX #1: Track if promise has been settled to prevent race conditions
+    let settled = false;
+
+    // CRITICAL FIX #14: Ensure timeout is a number before calculation
+    const timeoutSeconds = typeof options.timeout === 'number' ? options.timeout : 60;
+    const workerTimeout = (timeoutSeconds + 10) * 1000;
+
     const timeoutId = setTimeout(() => {
+      if (settled) return;
+      settled = true;
       worker.terminate();
-      reject(new AbortError(`Worker timeout after ${options.timeout || 60}s`));
+      reject(new AbortError(`Worker timeout after ${timeoutSeconds}s`));
     }, workerTimeout);
 
     worker.on('message', (result) => {
+      if (settled) return;
+      settled = true;
       clearTimeout(timeoutId);
       worker.terminate();
 
@@ -57,17 +75,7 @@ function runLighthouseInWorker(url, options = {}) {
         const error = new Error(result.error.message);
         error.code = result.error.code;
 
-        // Network errors are retryable
-        const networkErrorCodes = [
-          'ECONNREFUSED',
-          'ENOTFOUND',
-          'ETIMEDOUT',
-          'ECONNRESET',
-          'ENETUNREACH',
-          'PROTOCOL_TIMEOUT'
-        ];
-
-        if (networkErrorCodes.includes(error.code)) {
+        if (NETWORK_ERROR_CODES.includes(error.code)) {
           reject(error); // Will be retried by p-retry
         } else {
           // Non-network errors should not be retried
@@ -77,6 +85,8 @@ function runLighthouseInWorker(url, options = {}) {
     });
 
     worker.on('error', (error) => {
+      if (settled) return;
+      settled = true;
       clearTimeout(timeoutId);
       worker.terminate();
 
@@ -85,9 +95,11 @@ function runLighthouseInWorker(url, options = {}) {
     });
 
     worker.on('exit', (code) => {
+      if (settled) return;
       clearTimeout(timeoutId);
 
       if (code !== 0) {
+        settled = true;
         reject(new AbortError(`Worker exited with code ${code}`));
       }
     });
@@ -105,7 +117,11 @@ function runLighthouseInWorker(url, options = {}) {
  * @returns {Promise<Object>} - Audit result
  */
 export async function runLighthouseAudit(url, options = {}) {
-  const { reportsDir = './reports', dataDir = './data', device = 'mobile', json = false } = options;
+  // HIGH FIX #8: Validate options using validateAuditOptions
+  const validatedOptions = validateAuditOptions(options);
+  const { reportsDir = './reports', dataDir = './data', json = false } = options;
+  const { device, timeout } = validatedOptions;
+
   const startTime = Date.now();
 
   try {
@@ -113,7 +129,8 @@ export async function runLighthouseAudit(url, options = {}) {
     // Retry network errors once, fail immediately for other errors
     const result = await pRetry(
       async () => {
-        return await runLighthouseInWorker(url, options);
+        // HIGH FIX #8: Pass validated options to worker
+        return await runLighthouseInWorker(url, { ...options, device, timeout });
       },
       {
         retries: 1,  // Per spec: retry once
@@ -129,6 +146,9 @@ export async function runLighthouseAudit(url, options = {}) {
     // T036: Generate and save HTML report for successful audit
     // T045: Save audit data to JSON
     const auditDuration = Date.now() - startTime;
+
+    // HIGH FIX #10: Use consistent date for all file operations
+    const auditDate = new Date();
 
     // Extract category scores for audit metadata (Feature 002)
     const categories = {
@@ -157,17 +177,18 @@ export async function runLighthouseAudit(url, options = {}) {
     // T020, T028: Generate HTML report (always) and JSON report (optional with --json flag)
     // T023: Update data-storage to handle conditional JSON generation
     // T028: Use timestamped filenames with device mode
+    // HIGH FIX #10: Use consistent date for all file operations
     // Handle errors gracefully - log but don't crash if save fails
     const savePromises = [
       // Always save HTML report with timestamped filename
-      generateAndSaveReport(result.lhr, result.requestedUrl, reportsDir, device)
+      generateAndSaveReport(result.lhr, result.requestedUrl, reportsDir, device, auditDate)
         .catch(err => logError(url, `Failed to save report: ${err.message}`))
     ];
 
     // T020: Only save JSON data if --json flag is provided
     if (json) {
       savePromises.push(
-        saveAuditData(audit, result.metrics, dataDir, device)
+        saveAuditData(audit, result.metrics, dataDir, device, auditDate)
           .catch(err => logError(url, `Failed to save data: ${err.message}`))
       );
     }
@@ -210,17 +231,19 @@ export async function runLighthouseAudit(url, options = {}) {
 
     // T020, T030: Generate error report HTML (always) and JSON (optional with --json flag)
     // T030: Use timestamped filenames with device mode for error reports
+    // HIGH FIX #10: Use consistent date for error reports
     // Handle errors gracefully - log but don't crash if save fails
+    const errorDate = new Date();
     const savePromises = [
       // Always save HTML error report with timestamped filename
-      generateAndSaveErrorReport(failedAudit, reportsDir, device)
+      generateAndSaveErrorReport(failedAudit, reportsDir, device, errorDate)
         .catch(err => logError(url, `Failed to save error report: ${err.message}`))
     ];
 
     // Only save JSON error data if --json flag is provided
     if (json) {
       savePromises.push(
-        saveAuditData(failedAudit, null, dataDir, device)
+        saveAuditData(failedAudit, null, dataDir, device, errorDate)
           .catch(err => logError(url, `Failed to save error data: ${err.message}`))
       );
     }

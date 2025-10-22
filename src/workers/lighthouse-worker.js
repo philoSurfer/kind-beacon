@@ -73,7 +73,7 @@ async function runAuditInWorker() {
       ...extendedMetrics
     };
 
-    // Post successful result back to parent
+    // CRITICAL FIX #2: Post successful result BEFORE cleanup
     parentPort.postMessage({
       success: true,
       url: result.lhr.finalUrl || url,
@@ -84,8 +84,10 @@ async function runAuditInWorker() {
       lighthouseVersion: result.lhr.lighthouseVersion
     });
 
+    // Cleanup happens after message is sent (see below)
+
   } catch (error) {
-    // Post error back to parent
+    // CRITICAL FIX #2: Post error message BEFORE cleanup to avoid race condition
     parentPort.postMessage({
       success: false,
       url,
@@ -95,10 +97,24 @@ async function runAuditInWorker() {
         stack: error.stack
       }
     });
-  } finally {
-    // Always close Chrome
+
+    // Cleanup Chrome after posting message
     if (chrome) {
+      try {
+        await chrome.kill();
+      } catch (killError) {
+        // Ignore cleanup errors - worker is terminating anyway
+      }
+    }
+    return; // Exit early to prevent finally block
+  }
+
+  // CRITICAL FIX #2: Cleanup Chrome only after successful message posting
+  if (chrome) {
+    try {
       await chrome.kill();
+    } catch (killError) {
+      // Ignore cleanup errors in success case
     }
   }
 }

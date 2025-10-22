@@ -1,6 +1,6 @@
 {
   "name": "kind-beacon",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Core Web Vitals auditing tool using Google Lighthouse. Batch process URLs from CSV files with concurrent auditing, device emulation, and beautiful HTML reports.",
   "type": "module",
   "engines": {

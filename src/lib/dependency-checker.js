@@ -144,10 +144,14 @@ export async function getDependencyInfo() {
     node: process.version
   };
 
+  // HIGH FIX #16: More robust error handling for version retrieval
   try {
-    info.lighthouse = await getLighthouseVersion();
-  } catch {
-    info.lighthouse = 'not installed';
+    const version = await getLighthouseVersion();
+    info.lighthouse = version || 'not installed';
+  } catch (error) {
+    // Handle any unexpected errors during version detection
+    info.lighthouse = 'error detecting version';
+    console.error('[Warning] Error detecting Lighthouse version:', error.message);
   }
 
   return info;

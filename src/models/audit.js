@@ -42,11 +42,17 @@ export const DeviceMode = {
  * @returns {Object} - Validated audit object
  */
 export function createAudit(data) {
+  // HIGH FIX #11: Validate that at least one URL is provided
+  const sourceUrl = data.url || data.requestedUrl;
+  if (!sourceUrl) {
+    throw new Error('createAudit: Either url or requestedUrl must be provided');
+  }
+
   const audit = {
     url: data.url,
     requestedUrl: data.requestedUrl,
     timestamp: data.timestamp || new Date().toISOString(),
-    domain: data.domain || extractDomain(data.url || data.requestedUrl),
+    domain: data.domain || extractDomain(sourceUrl),
     lighthouseVersion: data.lighthouseVersion,
     deviceMode: data.deviceMode,
     auditDuration: data.auditDuration,
@@ -134,9 +140,9 @@ export function validateAudit(audit) {
     throw new Error('auditDuration must be positive');
   }
 
-  // Validate retry attempt
-  if (audit.retryAttempt !== 0 && audit.retryAttempt !== 1) {
-    throw new Error('retryAttempt must be 0 or 1');
+  // HIGH FIX #34: Validate retry attempt (allow >= 0 for flexibility)
+  if (typeof audit.retryAttempt !== 'number' || audit.retryAttempt < 0) {
+    throw new Error('retryAttempt must be a non-negative number');
   }
 
   // Error required if status is not success

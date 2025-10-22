@@ -12,6 +12,53 @@ import path from 'path';
 import { generateReportFilename } from '../lib/file-namer.js';
 
 /**
+ * CRITICAL FIX #3: Validates output path to prevent path traversal attacks
+ * Ensures the resolved path is within the current working directory
+ *
+ * @param {string} outputPath - Path to validate
+ * @returns {string} - Validated absolute path
+ * @throws {Error} - If path is outside current directory
+ */
+function validateOutputPath(outputPath) {
+  const resolved = path.resolve(outputPath);
+  const cwd = process.cwd();
+
+  // Normalize paths for comparison (handles trailing slashes, etc.)
+  const normalizedResolved = path.normalize(resolved);
+  const normalizedCwd = path.normalize(cwd);
+
+  // Check if resolved path starts with current directory
+  if (!normalizedResolved.startsWith(normalizedCwd + path.sep) &&
+      normalizedResolved !== normalizedCwd) {
+    throw new Error(
+      `Security error: Output path must be within current directory.\n` +
+      `Attempted path: ${outputPath}\n` +
+      `Resolved to: ${resolved}\n` +
+      `Current directory: ${cwd}`
+    );
+  }
+
+  return resolved;
+}
+
+/**
+ * HIGH FIX #17: Escapes HTML special characters to prevent XSS
+ *
+ * @param {string} text - Text to escape
+ * @returns {string} - HTML-escaped text
+ */
+function escapeHtml(text) {
+  if (typeof text !== 'string') return '';
+  return text.replace(/[&<>"']/g, (match) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  })[match]);
+}
+
+/**
  * Generates an HTML report from a Lighthouse Result (LHR) object
  *
  * @param {Object} lhr - Lighthouse Result object
@@ -39,13 +86,18 @@ export async function generateHtmlReport(lhr, options = {}) {
  * const html = generateErrorReport({ requestedUrl: 'https://example.com', error: 'Timeout', status: 'timeout' });
  */
 export function generateErrorReport(audit) {
+  // HIGH FIX #17: Escape user-provided content to prevent XSS
+  const escapedUrl = escapeHtml(audit.requestedUrl);
+  const escapedError = escapeHtml(audit.error || 'Unknown error');
+  const escapedDomain = escapeHtml(audit.domain);
+
   const html = `
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Audit Failed - ${audit.requestedUrl}</title>
+  <title>Audit Failed - ${escapedUrl}</title>
   <style>
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
@@ -112,29 +164,29 @@ export function generateErrorReport(audit) {
   <div class="error-container">
     <div class="error-icon">⚠️</div>
     <h1>Audit Failed</h1>
-    <div class="url">${audit.requestedUrl}</div>
+    <div class="url">${escapedUrl}</div>
 
     <div class="error-details">
       <strong>Error:</strong>
-      <p>${audit.error || 'Unknown error'}</p>
+      <p>${escapedError}</p>
     </div>
 
     <div class="metadata">
       <dl>
         <dt>Status:</dt>
-        <dd>${audit.status}</dd>
+        <dd>${escapeHtml(audit.status)}</dd>
       </dl>
       <dl>
         <dt>Timestamp:</dt>
-        <dd>${audit.timestamp}</dd>
+        <dd>${escapeHtml(audit.timestamp)}</dd>
       </dl>
       <dl>
         <dt>Domain:</dt>
-        <dd>${audit.domain}</dd>
+        <dd>${escapedDomain}</dd>
       </dl>
       <dl>
         <dt>Device Mode:</dt>
-        <dd>${audit.deviceMode}</dd>
+        <dd>${escapeHtml(audit.deviceMode)}</dd>
       </dl>
       <dl>
         <dt>Audit Duration:</dt>
@@ -148,7 +200,7 @@ export function generateErrorReport(audit) {
       ` : ''}
       <dl>
         <dt>Lighthouse Version:</dt>
-        <dd>${audit.lighthouseVersion}</dd>
+        <dd>${escapeHtml(audit.lighthouseVersion)}</dd>
       </dl>
     </div>
   </div>
@@ -172,11 +224,14 @@ export function generateErrorReport(audit) {
  * // returns: '/absolute/path/to/reports/example.com-2025-10-22-report.html'
  */
 export async function saveReport(html, outputDir, filename) {
+  // CRITICAL FIX #3: Validate output path to prevent path traversal
+  const validatedDir = validateOutputPath(outputDir);
+
   // Ensure output directory exists
-  await fs.mkdir(outputDir, { recursive: true });
+  await fs.mkdir(validatedDir, { recursive: true });
 
   // Build full path
-  const filePath = path.join(outputDir, filename);
+  const filePath = path.join(validatedDir, filename);
 
   // Write HTML to file
   await fs.writeFile(filePath, html, 'utf-8');
