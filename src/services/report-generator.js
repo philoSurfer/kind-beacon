@@ -185,36 +185,38 @@ export async function saveReport(html, outputDir, filename) {
 }
 
 /**
- * Generates and saves an HTML report for a successful audit
+ * T028: Generates and saves an HTML report with timestamped filename (Feature 002)
  *
  * @param {Object} lhr - Lighthouse Result object
  * @param {string} requestedUrl - Original URL that was audited
  * @param {string} outputDir - Directory to save the report
+ * @param {string} [device='mobile'] - Device mode ('mobile' or 'desktop')
  * @param {Date} [date] - Date to use for filename (defaults to now)
  * @returns {Promise<string>} - Full path to the saved file
  *
  * @example
- * const filePath = await generateAndSaveReport(lhr, 'https://example.com', './reports');
+ * const filePath = await generateAndSaveReport(lhr, 'https://example.com', './reports', 'mobile');
  */
-export async function generateAndSaveReport(lhr, requestedUrl, outputDir, date = new Date()) {
+export async function generateAndSaveReport(lhr, requestedUrl, outputDir, device = 'mobile', date = new Date()) {
   const html = await generateHtmlReport(lhr);
-  const filename = generateReportFilename(requestedUrl, date);
+  const filename = generateReportFilename(requestedUrl, device, date);
   return await saveReport(html, outputDir, filename);
 }
 
 /**
- * Generates and saves an error report for a failed audit
+ * T030: Generates and saves an error report with timestamped filename (Feature 002)
  *
  * @param {Object} audit - Failed audit object
  * @param {string} outputDir - Directory to save the report
+ * @param {string} [device='mobile'] - Device mode ('mobile' or 'desktop')
  * @param {Date} [date] - Date to use for filename (defaults to now)
  * @returns {Promise<string>} - Full path to the saved file
  *
  * @example
- * const filePath = await generateAndSaveErrorReport(audit, './reports');
+ * const filePath = await generateAndSaveErrorReport(audit, './reports', 'mobile');
  */
-export async function generateAndSaveErrorReport(audit, outputDir, date = new Date()) {
+export async function generateAndSaveErrorReport(audit, outputDir, device = 'mobile', date = new Date()) {
   const html = generateErrorReport(audit);
-  const filename = generateReportFilename(audit.requestedUrl, date);
+  const filename = generateReportFilename(audit.requestedUrl, device, date);
   return await saveReport(html, outputDir, filename);
 }

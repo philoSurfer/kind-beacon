@@ -2,44 +2,72 @@
  * File Naming Utility
  *
  * Generates standardized filenames for reports and data files.
- * Format: {domain}-{YYYY-MM-DD}-report.json or .html
- * Uses domain from domain-extractor and ISO date format.
+ * Feature 002: Updated format to include timestamps for chronological sorting
+ * Format: {domain}_{YYYY-MM-DD-HHmmss}_{device}.{extension}
+ * Uses domain from domain-extractor and ISO 8601 timestamp format (UTC).
  */
 
 import { extractDomain } from './domain-extractor.js';
 
 /**
- * Generates a filename for a report or data file
+ * T025: Generates an ISO 8601 timestamp for filename (UTC timezone)
+ * Format: YYYY-MM-DD-HHmmss (no colons for Windows compatibility)
+ *
+ * @param {Date} [date=new Date()] - Date to format (defaults to now)
+ * @returns {string} - Timestamp in format YYYY-MM-DD-HHmmss
+ *
+ * @example
+ * generateTimestamp(new Date('2025-10-22T14:30:52.000Z'))
+ * // returns '2025-10-22-143052'
+ */
+export function generateTimestamp(date = new Date()) {
+  // Use UTC to avoid timezone ambiguity
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(date.getUTCDate()).padStart(2, '0');
+  const hours = String(date.getUTCHours()).padStart(2, '0');
+  const minutes = String(date.getUTCMinutes()).padStart(2, '0');
+  const seconds = String(date.getUTCSeconds()).padStart(2, '0');
+
+  return `${year}-${month}-${day}-${hours}${minutes}${seconds}`;
+}
+
+/**
+ * T026, T027: Generates a filename with timestamp and device mode (Feature 002)
+ * Format: {domain}_{timestamp}_{device}.{extension}
  *
  * @param {string} url - The URL that was audited
  * @param {string} extension - File extension (e.g., 'json', 'html')
+ * @param {string} [device='mobile'] - Device mode ('mobile' or 'desktop')
  * @param {Date} [date=new Date()] - Optional date to use (defaults to now)
- * @returns {string} - Filename in format: {domain}-{YYYY-MM-DD}-report.{extension}
+ * @returns {string} - Filename in format: {domain}_{YYYY-MM-DD-HHmmss}_{device}.{extension}
  *
  * @example
- * generateFilename('https://example.com', 'json')
- * // returns 'example.com-2025-10-22-report.json'
+ * generateFilename('https://example.com', 'html', 'mobile', new Date('2025-10-22T14:30:52.000Z'))
+ * // returns 'example-com_2025-10-22-143052_mobile.html'
  *
- * generateFilename('https://192.168.1.1', 'html')
- * // returns '192-168-1-1-2025-10-22-report.html'
+ * generateFilename('https://192.168.1.1', 'json', 'desktop')
+ * // returns '192-168-1-1_2025-10-22-143052_desktop.json'
  */
-export function generateFilename(url, extension, date = new Date()) {
+export function generateFilename(url, extension, device = 'mobile', date = new Date()) {
   const domain = extractDomain(url);
 
   if (!domain) {
     throw new Error(`Invalid URL: ${url}`);
   }
 
-  const dateString = formatDateForFilename(date);
+  // T025: Generate timestamp
+  const timestamp = generateTimestamp(date);
 
   // Remove leading dot from extension if present
   const ext = extension.startsWith('.') ? extension.slice(1) : extension;
 
-  return `${domain}-${dateString}-report.${ext}`;
+  // T027: Updated filename format with timestamp
+  return `${domain}_${timestamp}_${device}.${ext}`;
 }
 
 /**
- * Formats a date as YYYY-MM-DD for filenames
+ * Formats a date as YYYY-MM-DD for filenames (legacy function, still used for backward compatibility)
  *
  * @param {Date} date - Date to format
  * @returns {string} - Date in YYYY-MM-DD format
@@ -57,33 +85,35 @@ export function formatDateForFilename(date) {
 }
 
 /**
- * Generates a JSON data filename for a given URL
+ * T028: Generates a JSON data filename with timestamp and device mode (Feature 002)
  *
  * @param {string} url - The URL that was audited
+ * @param {string} [device='mobile'] - Device mode ('mobile' or 'desktop')
  * @param {Date} [date=new Date()] - Optional date to use (defaults to now)
- * @returns {string} - Filename in format: {domain}-{YYYY-MM-DD}-report.json
+ * @returns {string} - Filename in format: {domain}_{YYYY-MM-DD-HHmmss}_{device}.json
  *
  * @example
- * generateDataFilename('https://example.com')
- * // returns 'example.com-2025-10-22-report.json'
+ * generateDataFilename('https://example.com', 'mobile', new Date('2025-10-22T14:30:52.000Z'))
+ * // returns 'example-com_2025-10-22-143052_mobile.json'
  */
-export function generateDataFilename(url, date = new Date()) {
-  return generateFilename(url, 'json', date);
+export function generateDataFilename(url, device = 'mobile', date = new Date()) {
+  return generateFilename(url, 'json', device, date);
 }
 
 /**
- * Generates an HTML report filename for a given URL
+ * T028: Generates an HTML report filename with timestamp and device mode (Feature 002)
  *
  * @param {string} url - The URL that was audited
+ * @param {string} [device='mobile'] - Device mode ('mobile' or 'desktop')
  * @param {Date} [date=new Date()] - Optional date to use (defaults to now)
- * @returns {string} - Filename in format: {domain}-{YYYY-MM-DD}-report.html
+ * @returns {string} - Filename in format: {domain}_{YYYY-MM-DD-HHmmss}_{device}.html
  *
  * @example
- * generateReportFilename('https://example.com')
- * // returns 'example.com-2025-10-22-report.html'
+ * generateReportFilename('https://example.com', 'mobile', new Date('2025-10-22T14:30:52.000Z'))
+ * // returns 'example-com_2025-10-22-143052_mobile.html'
  */
-export function generateReportFilename(url, date = new Date()) {
-  return generateFilename(url, 'html', date);
+export function generateReportFilename(url, device = 'mobile', date = new Date()) {
+  return generateFilename(url, 'html', device, date);
 }
 
 /**

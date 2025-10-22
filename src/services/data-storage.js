@@ -13,19 +13,20 @@ import { auditToJSON } from '../models/audit.js';
 import { metricsToJSON } from '../models/metrics.js';
 
 /**
- * Saves audit data to a JSON file
+ * T028: Saves audit data to a JSON file with timestamped filename (Feature 002)
  *
  * @param {Object} audit - Audit object from audit model
  * @param {Object|null} metrics - Metrics object from metrics model (null if audit failed)
  * @param {string} outputDir - Directory to save the data file (e.g., './data')
+ * @param {string} [device='mobile'] - Device mode ('mobile' or 'desktop')
  * @param {Date} [date] - Date to use for filename (defaults to now)
  * @returns {Promise<string>} - Full path to the saved file
  *
  * @example
- * const filePath = await saveAuditData(audit, metrics, './data');
- * // returns: '/absolute/path/to/data/example.com-2025-10-22-report.json'
+ * const filePath = await saveAuditData(audit, metrics, './data', 'mobile');
+ * // returns: '/absolute/path/to/data/example-com_2025-10-22-143052_mobile.json'
  */
-export async function saveAuditData(audit, metrics, outputDir, date = new Date()) {
+export async function saveAuditData(audit, metrics, outputDir, device = 'mobile', date = new Date()) {
   // Ensure output directory exists
   await fs.mkdir(outputDir, { recursive: true });
 
@@ -36,8 +37,8 @@ export async function saveAuditData(audit, metrics, outputDir, date = new Date()
     metrics: metrics ? metricsToJSON(metrics).metrics : null
   };
 
-  // Generate filename
-  const filename = generateDataFilename(audit.requestedUrl, date);
+  // T028: Generate filename with timestamp and device
+  const filename = generateDataFilename(audit.requestedUrl, device, date);
   const filePath = path.join(outputDir, filename);
 
   // Write JSON to file with pretty formatting

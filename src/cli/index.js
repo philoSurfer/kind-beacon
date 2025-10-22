@@ -57,6 +57,7 @@ For more information: https://github.com/kind-beacon/kind-beacon
     .option('-c, --concurrency <number>', 'max simultaneous audits (1-10)', '3')
     .option('-t, --timeout <seconds>', 'audit timeout in seconds', '60')
     .option('-d, --device <type>', 'device emulation: mobile or desktop', 'mobile')
+    .option('--json', 'generate JSON reports in addition to HTML (Feature 002)', false)
     .option('--data-dir <path>', 'output directory for JSON data', './data')
     .option('--reports-dir <path>', 'output directory for HTML reports', './reports')
     .option('--config <file>', 'path to config file')

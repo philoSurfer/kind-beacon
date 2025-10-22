@@ -42,7 +42,8 @@ export async function orchestrateAudits(urls, auditFunction, options = {}) {
     timeout = 60,
     device = 'mobile',
     dataDir = './data',
-    reportsDir = './reports'
+    reportsDir = './reports',
+    json = false  // T033: Support --json flag in batch mode
   } = options;
 
   // Validate concurrency
@@ -88,12 +89,13 @@ export async function orchestrateAudits(urls, auditFunction, options = {}) {
         // Update progress bar with current URL
         progressBar.update(completed, { url });
 
-        // Run the audit
+        // T033: Run the audit with all options including --json flag
         const result = await auditFunction(url, {
           timeout,
           device,
           dataDir,
-          reportsDir
+          reportsDir,
+          json  // Pass through json flag
         });
 
         const duration = Date.now() - auditStartTime;

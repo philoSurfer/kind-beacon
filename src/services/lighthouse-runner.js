@@ -105,7 +105,7 @@ function runLighthouseInWorker(url, options = {}) {
  * @returns {Promise<Object>} - Audit result
  */
 export async function runLighthouseAudit(url, options = {}) {
-  const { reportsDir = './reports', dataDir = './data', device = 'mobile' } = options;
+  const { reportsDir = './reports', dataDir = './data', device = 'mobile', json = false } = options;
   const startTime = Date.now();
 
   try {
@@ -125,9 +125,22 @@ export async function runLighthouseAudit(url, options = {}) {
       }
     );
 
+    // T010: Create audit object with category scores
     // T036: Generate and save HTML report for successful audit
     // T045: Save audit data to JSON
     const auditDuration = Date.now() - startTime;
+
+    // Extract category scores for audit metadata (Feature 002)
+    const categories = {
+      performance: result.lhr.categories?.performance?.score
+        ? Math.round(result.lhr.categories.performance.score * 100) : 0,
+      accessibility: result.lhr.categories?.accessibility?.score
+        ? Math.round(result.lhr.categories.accessibility.score * 100) : 0,
+      seo: result.lhr.categories?.seo?.score
+        ? Math.round(result.lhr.categories.seo.score * 100) : 0,
+      bestPractices: result.lhr.categories?.['best-practices']?.score
+        ? Math.round(result.lhr.categories['best-practices'].score * 100) : 0
+    };
 
     // Create audit object
     const audit = createAuditFromLighthouseResult(
@@ -138,14 +151,28 @@ export async function runLighthouseAudit(url, options = {}) {
       result.retryAttempt || 0
     );
 
-    // Generate and save report + data (in parallel for efficiency)
+    // Add category scores to audit (Feature 002)
+    audit.categories = categories;
+
+    // T020, T028: Generate HTML report (always) and JSON report (optional with --json flag)
+    // T023: Update data-storage to handle conditional JSON generation
+    // T028: Use timestamped filenames with device mode
     // Handle errors gracefully - log but don't crash if save fails
-    await Promise.allSettled([
-      generateAndSaveReport(result.lhr, result.requestedUrl, reportsDir)
-        .catch(err => logError(url, `Failed to save report: ${err.message}`)),
-      saveAuditData(audit, result.metrics, dataDir)
-        .catch(err => logError(url, `Failed to save data: ${err.message}`))
-    ]);
+    const savePromises = [
+      // Always save HTML report with timestamped filename
+      generateAndSaveReport(result.lhr, result.requestedUrl, reportsDir, device)
+        .catch(err => logError(url, `Failed to save report: ${err.message}`))
+    ];
+
+    // T020: Only save JSON data if --json flag is provided
+    if (json) {
+      savePromises.push(
+        saveAuditData(audit, result.metrics, dataDir, device)
+          .catch(err => logError(url, `Failed to save data: ${err.message}`))
+      );
+    }
+
+    await Promise.allSettled(savePromises);
 
     return {
       success: true,
@@ -181,14 +208,24 @@ export async function runLighthouseAudit(url, options = {}) {
       status
     );
 
-    // Generate and save error report + data (in parallel)
+    // T020, T030: Generate error report HTML (always) and JSON (optional with --json flag)
+    // T030: Use timestamped filenames with device mode for error reports
     // Handle errors gracefully - log but don't crash if save fails
-    await Promise.allSettled([
-      generateAndSaveErrorReport(failedAudit, reportsDir)
-        .catch(err => logError(url, `Failed to save error report: ${err.message}`)),
-      saveAuditData(failedAudit, null, dataDir)
-        .catch(err => logError(url, `Failed to save error data: ${err.message}`))
-    ]);
+    const savePromises = [
+      // Always save HTML error report with timestamped filename
+      generateAndSaveErrorReport(failedAudit, reportsDir, device)
+        .catch(err => logError(url, `Failed to save error report: ${err.message}`))
+    ];
+
+    // Only save JSON error data if --json flag is provided
+    if (json) {
+      savePromises.push(
+        saveAuditData(failedAudit, null, dataDir, device)
+          .catch(err => logError(url, `Failed to save error data: ${err.message}`))
+      );
+    }
+
+    await Promise.allSettled(savePromises);
 
     // Return error result instead of throwing
     // This allows the orchestrator to continue processing other URLs
