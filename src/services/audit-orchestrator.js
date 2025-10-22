@@ -72,24 +72,18 @@ export async function orchestrateAudits(urls, auditFunction, options = {}) {
 
   logInfo(`Starting audit of ${total} URL${total > 1 ? 's' : ''} with concurrency ${concurrency}`);
 
-  // Create progress bar for visual feedback
-  const progressBar = createProgressBar(total);
-  progressBar.start();
+  // Create concurrency limiter using p-limit
+  const limit = pLimit(concurrency);
+  let completed = 0;
 
-  // CRITICAL FIX #5: Use try-finally to ensure progress bar is always stopped
-  try {
-    // Create concurrency limiter using p-limit
-    const limit = pLimit(concurrency);
-    let completed = 0;
-
-    // Create audit tasks with progress tracking
-    const auditTasks = urls.map((url, index) => {
+  // Create audit tasks with progress tracking
+  const auditTasks = urls.map((url, index) => {
     return limit(async () => {
       const auditStartTime = Date.now();
 
       try {
-        // Update progress bar with current URL
-        progressBar.update(completed, { url });
+        // Log start with clean console output
+        console.log(`[${completed + 1}/${total}] Starting audit: ${url}`);
 
         // CRITICAL FIX #4: Wrap audit function in Promise.resolve to catch synchronous throws
         const result = await Promise.resolve(
@@ -105,8 +99,9 @@ export async function orchestrateAudits(urls, auditFunction, options = {}) {
         const duration = Date.now() - auditStartTime;
         completed++;
 
-        // Increment progress bar
-        progressBar.increment({ url });
+        // Log completion with clean console output
+        const durationSec = Math.round(duration / 1000);
+        console.log(`[${completed}/${total}] ✓ Completed: ${url} (${durationSec}s)`);
 
         results.successful.push({
           url,
@@ -118,8 +113,8 @@ export async function orchestrateAudits(urls, auditFunction, options = {}) {
       } catch (error) {
         completed++;
 
-        // Increment progress bar even on error
-        progressBar.increment({ url });
+        // Log error with clean console output
+        console.log(`[${completed}/${total}] ✗ Failed: ${url} - ${error.message}`);
 
         results.failed.push({
           url,
@@ -131,17 +126,13 @@ export async function orchestrateAudits(urls, auditFunction, options = {}) {
     });
   });
 
-    // Execute all audits with concurrency limit
-    await Promise.all(auditTasks);
+  // Execute all audits with concurrency limit
+  await Promise.all(auditTasks);
 
-    // Calculate total duration
-    results.summary.duration = Date.now() - startTime;
+  // Calculate total duration
+  results.summary.duration = Date.now() - startTime;
 
-    return results;
-  } finally {
-    // CRITICAL FIX #5: Always stop progress bar to prevent memory leaks
-    progressBar.stop();
-  }
+  return results;
 }
 
 /**

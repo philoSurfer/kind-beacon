@@ -89,7 +89,16 @@ For more information: https://github.com/kind-beacon/kind-beacon
 }
 
 // Run CLI if executed directly
-if (import.meta.url === `file://${process.argv[1]}`) {
+// CRITICAL FIX: Use startsWith to handle symlinks properly
+// When run via npm global bin, argv[1] might be a symlink path
+const scriptPath = fileURLToPath(import.meta.url);
+const isDirectExecution = process.argv[1] && (
+  process.argv[1] === scriptPath ||
+  process.argv[1].endsWith('/kind-beacon') ||
+  process.argv[1].endsWith('kind-beacon/src/cli/index.js')
+);
+
+if (isDirectExecution) {
   main().catch((error) => {
     console.error('Fatal error:', error);
     process.exit(5);

@@ -189,12 +189,15 @@ export function clearLine() {
  */
 export function createProgressBar(total) {
   const bar = new cliProgress.SingleBar({
-    format: 'Auditing URLs... [{bar}] {percentage}% | {value}/{total} | ETA: {eta_formatted} | {url}',
+    format: 'Progress: [{bar}] {percentage}% | {value}/{total} | ETA: {eta_formatted}\n  {url}',
     barCompleteChar: '\u2588',
     barIncompleteChar: '\u2591',
     hideCursor: true,
     clearOnComplete: false,
-    stopOnComplete: true
+    stopOnComplete: true,
+    forceRedraw: true,
+    autopadding: true,
+    barsize: 30
   });
 
   return {
